@@ -119,3 +119,4 @@ st.markdown(
     "<center>Developed with ❤️ using Streamlit | Random Forest Model for AQI Prediction</center>",
     unsafe_allow_html=True,
 )
+
