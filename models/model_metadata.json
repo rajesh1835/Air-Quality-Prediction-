@@ -1,0 +1,26 @@
+{
+  "model_name": "RandomForest",
+  "metrics": {
+    "train_rmse": 33.89049762575596,
+    "test_rmse": 27.59427922384903,
+    "train_r2": 0.9480259073730054,
+    "test_r2": 0.9059612659954241
+  },
+  "features": [
+    "PM2.5",
+    "CO",
+    "PM10",
+    "NO",
+    "O3",
+    "NOx",
+    "NO2",
+    "SO2",
+    "Toluene",
+    "Xylene",
+    "Benzene",
+    "City_Encoded",
+    "Month",
+    "DayOfWeek",
+    "NH3"
+  ]
+}
