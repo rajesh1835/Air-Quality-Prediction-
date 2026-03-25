@@ -44,7 +44,22 @@ def load_model():
         if os.path.exists(path):
             with open(path, "rb") as f:
                 return pickle.load(f), os.path.basename(path)
-    st.error("No model file found. Run `python src/train.py` first.")
+
+    # Auto-train if no model found (e.g. first deploy on Streamlit Cloud)
+    st.info("🔄 No model found — training now (one-time setup, may take a minute)...")
+    try:
+        from train import main as train_main
+        train_main()
+    except ImportError:
+        # Fallback for running from project root
+        from src.train import main as train_main
+        train_main()
+
+    if os.path.exists(BEST_MODEL_PATH):
+        with open(BEST_MODEL_PATH, "rb") as f:
+            return pickle.load(f), "best_model.pkl"
+
+    st.error("❌ Auto-training failed. Check the logs for details.")
     st.stop()
 
 
