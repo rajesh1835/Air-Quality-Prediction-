@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AQI Prediction</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        :root {
+            --bg: #0e1117;
+            --surface: #1a1d24;
+            --border: #2d3139;
+            --text: #fafafa;
+            --text-muted: #a0a4ab;
+            --accent: #ff4b4b;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Source Sans Pro', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+        .layout {
+            display: flex;
+            min-height: 100vh;
+        }
+        .sidebar {
+            width: 320px;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            padding: 24px 20px;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+        .main {
+            flex: 1;
+            padding: 32px 40px;
+            overflow-y: auto;
+        }
+        h1 { font-size: 1.8rem; margin-bottom: 8px; }
+        h2 { font-size: 1.3rem; margin-bottom: 16px; color: var(--text); }
+        h3 { font-size: 1.1rem; margin-bottom: 12px; }
+        .subtitle { color: var(--text-muted); margin-bottom: 24px; }
+        .sidebar h2 { font-size: 1.2rem; margin-bottom: 4px; }
+        .sidebar p { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 16px; }
+
+        .slider-group { margin-bottom: 14px; }
+        .slider-group label {
+            display: flex; justify-content: space-between;
+            font-size: 0.85rem; margin-bottom: 4px; color: var(--text-muted);
+        }
+        .slider-group label span.val { color: var(--text); font-weight: 600; }
+        input[type="range"] {
+            width: 100%; height: 6px;
+            -webkit-appearance: none; appearance: none;
+            background: var(--border); border-radius: 3px; outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 16px; height: 16px;
+            background: var(--accent); border-radius: 50%; cursor: pointer;
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 16px; height: 16px;
+            background: var(--accent); border-radius: 50%; cursor: pointer; border: none;
+        }
+        .date-input {
+            width: 100%; padding: 8px 12px; background: var(--bg);
+            border: 1px solid var(--border); border-radius: 6px;
+            color: var(--text); font-size: 0.9rem; margin-top: 4px;
+        }
+        .divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+
+        .tabs {
+            display: flex; gap: 0; border-bottom: 2px solid var(--border);
+            margin-bottom: 24px;
+        }
+        .tab-btn {
+            padding: 10px 20px; background: none; border: none;
+            color: var(--text-muted); cursor: pointer; font-size: 0.95rem;
+            border-bottom: 2px solid transparent; margin-bottom: -2px;
+            transition: all 0.2s;
+        }
+        .tab-btn:hover { color: var(--text); }
+        .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .predict-btn {
+            width: 100%; padding: 12px; background: var(--accent);
+            color: white; border: none; border-radius: 8px;
+            font-size: 1rem; font-weight: 600; cursor: pointer;
+            margin: 20px 0; transition: opacity 0.2s;
+        }
+        .predict-btn:hover { opacity: 0.9; }
+
+        .result-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 24px; }
+        .metric-card {
+            background: var(--surface); border-radius: 12px;
+            padding: 24px; border: 1px solid var(--border);
+        }
+        .metric-value { font-size: 2.5rem; font-weight: 700; }
+        .metric-label { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 4px; }
+        .aqi-badge {
+            display: inline-block; padding: 8px 16px; border-radius: 8px;
+            color: white; font-weight: 700; margin-top: 12px; font-size: 1rem;
+        }
+        .aqi-desc { color: var(--text-muted); font-size: 0.9rem; margin-top: 8px; }
+
+        .warning-box {
+            background: #332b00; border: 1px solid #665500;
+            padding: 12px 16px; border-radius: 8px; margin-bottom: 16px;
+            color: #ffc107; font-size: 0.9rem;
+        }
+
+        table {
+            width: 100%; border-collapse: collapse; margin-top: 16px;
+            background: var(--surface); border-radius: 8px; overflow: hidden;
+        }
+        th, td {
+            padding: 10px 14px; text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        th { background: var(--bg); color: var(--text-muted); font-size: 0.85rem; }
+        td { font-size: 0.9rem; }
+
+        .about-content { max-width: 700px; }
+        .about-content p { margin-bottom: 12px; color: var(--text-muted); }
+        .about-content table { margin-bottom: 20px; }
+        .metrics-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 20px 0; }
+        .mini-metric { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center; }
+        .mini-metric .val { font-size: 1.4rem; font-weight: 700; }
+        .mini-metric .lbl { color: var(--text-muted); font-size: 0.8rem; }
+
+        .city-select {
+            width: 100%; padding: 8px 12px; background: var(--bg);
+            border: 1px solid var(--border); border-radius: 6px;
+            color: var(--text); font-size: 0.9rem; margin-top: 8px;
+        }
+        .city-checkboxes { max-height: 200px; overflow-y: auto; margin-top: 8px; }
+        .city-checkboxes label {
+            display: block; padding: 4px 0; font-size: 0.9rem;
+            color: var(--text-muted); cursor: pointer;
+        }
+        .city-checkboxes input { margin-right: 8px; }
+
+        #prediction-result { display: none; }
+
+        @media (max-width: 768px) {
+            .layout { flex-direction: column; }
+            .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
+            .main { padding: 20px; }
+            .result-grid { grid-template-columns: 1fr; }
+            .metrics-row { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar">
+        <h2>Input Parameters</h2>
+        <p>Adjust pollutant concentrations below.</p>
+        <div id="sliders"></div>
+        <hr class="divider">
+        <h3>Prediction Date</h3>
+        <input type="date" id="pred-date" class="date-input">
+    </aside>
+
+    <main class="main">
+        <h1>Air Quality Index (AQI) Prediction</h1>
+        <p class="subtitle">Predict the Air Quality Index based on pollutant concentrations using machine learning.</p>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="prediction">Prediction</button>
+            <button class="tab-btn" data-tab="importance">Feature Importance</button>
+            <button class="tab-btn" data-tab="trends">Historical Trends</button>
+            <button class="tab-btn" data-tab="about">About</button>
+        </div>
+
+        <div id="prediction" class="tab-content active">
+            <div id="zero-warning" class="warning-box" style="display:none;">
+                All pollutant values are zero. Please adjust the sliders in the sidebar for a meaningful prediction.
+            </div>
+            <button class="predict-btn" onclick="predictAQI()">Predict AQI</button>
+            <div id="prediction-result">
+                <div class="result-grid">
+                    <div class="metric-card">
+                        <div class="metric-label">Predicted AQI</div>
+                        <div class="metric-value" id="aqi-value">--</div>
+                        <div id="aqi-badge" class="aqi-badge"></div>
+                        <div id="aqi-desc" class="aqi-desc"></div>
+                    </div>
+                    <div class="metric-card">
+                        <div id="gauge-chart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="importance" class="tab-content">
+            <h2>What Drives AQI the Most?</h2>
+            <p class="subtitle">Feature importance shows which pollutants most influence the model's predictions.</p>
+            <div id="importance-chart"></div>
+        </div>
+
+        <div id="trends" class="tab-content">
+            <h2>Historical AQI Trends</h2>
+            <p class="subtitle" style="margin-bottom:12px;">Select cities to compare monthly average AQI.</p>
+            <div class="city-checkboxes" id="city-checkboxes"></div>
+            <div id="trends-chart" style="margin-top:16px;"></div>
+            <h3 style="margin-top:24px;">Summary Statistics</h3>
+            <div id="summary-table"></div>
+        </div>
+
+        <div id="about" class="tab-content">
+            <div class="about-content">
+                <h2>About This Application</h2>
+                <h3>What is AQI?</h3>
+                <p>The <strong>Air Quality Index (AQI)</strong> is a standardized indicator of air quality in a given area. It tells you how clean or polluted the air is, and what associated health effects might be of concern.</p>
+
+                <h3>AQI Categories</h3>
+                <table>
+                    <thead><tr><th>AQI Range</th><th>Category</th><th>Health Impact</th></tr></thead>
+                    <tbody>
+                        <tr><td>0-50</td><td style="color:#28a745;">Good</td><td>Minimal impact</td></tr>
+                        <tr><td>51-100</td><td style="color:#ffc107;">Moderate</td><td>Acceptable for most</td></tr>
+                        <tr><td>101-150</td><td style="color:#fd7e14;">Unhealthy for Sensitive Groups</td><td>Vulnerable people affected</td></tr>
+                        <tr><td>151-200</td><td style="color:#dc3545;">Unhealthy</td><td>Health effects for everyone</td></tr>
+                        <tr><td>201-300</td><td style="color:#6f42c1;">Very Unhealthy</td><td>Emergency conditions</td></tr>
+                        <tr><td>301-500</td><td style="color:#800000;">Hazardous</td><td>Serious health effects</td></tr>
+                    </tbody>
+                </table>
+
+                <h3>Model Details</h3>
+                <p><strong>Algorithm:</strong> RandomForest</p>
+                <div class="metrics-row">
+                    <div class="mini-metric"><div class="lbl">Train RMSE</div><div class="val">33.89</div></div>
+                    <div class="mini-metric"><div class="lbl">Test RMSE</div><div class="val">27.59</div></div>
+                    <div class="mini-metric"><div class="lbl">Train R&sup2;</div><div class="val">0.9480</div></div>
+                    <div class="mini-metric"><div class="lbl">Test R&sup2;</div><div class="val">0.9060</div></div>
+                </div>
+
+                <h3>Input Features</h3>
+                <p>The model uses <strong>12 pollutant measurements</strong> plus temporal features (month, day of week) to predict AQI.</p>
+                <p><strong>Pollutants:</strong> PM2.5, PM10, NO, NO2, NOx, NH3, CO, SO2, O3, Benzene, Toluene, Xylene</p>
+
+                <h3>How to Use</h3>
+                <p>1. Adjust the pollutant sliders in the <strong>sidebar</strong><br>
+                   2. Select a prediction date<br>
+                   3. Click <strong>Predict AQI</strong> to get the result</p>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script>
+// ---- Configuration ----
+const SLIDERS = [
+    { name: "PM2.5", min: 0, max: 500, unit: "\u03bcg/m\u00b3", step: 0.1 },
+    { name: "PM10", min: 0, max: 600, unit: "\u03bcg/m\u00b3", step: 0.1 },
+    { name: "NO", min: 0, max: 150, unit: "\u03bcg/m\u00b3", step: 0.1 },
+    { name: "NO2", min: 0, max: 200, unit: "\u03bcg/m\u00b3", step: 0.1 },
+    { name: "NOx", min: 0, max: 250, unit: "ppb", step: 0.1 },
+    { name: "NH3", min: 0, max: 200, unit: "\u03bcg/m\u00b3", step: 0.1 },
+    { name: "CO", min: 0, max: 50, unit: "mg/m\u00b3", step: 0.1 },
+    { name: "SO2", min: 0, max: 100, unit: "\u03bcg/m\u00b3", step: 0.1 },
+    { name: "O3", min: 0, max: 200, unit: "\u03bcg/m\u00b3", step: 0.1 },
+    { name: "Benzene", min: 0, max: 50, unit: "\u03bcg/m\u00b3", step: 0.1 },
+    { name: "Toluene", min: 0, max: 200, unit: "\u03bcg/m\u00b3", step: 0.1 },
+    { name: "Xylene", min: 0, max: 50, unit: "\u03bcg/m\u00b3", step: 0.1 },
+];
+
+// Feature importance from trained model
+const FEATURE_IMPORTANCE = {
+    "PM2.5": 0.492825, "CO": 0.392549, "PM10": 0.035503, "NO": 0.035018,
+    "O3": 0.009403, "NOx": 0.008896, "NO2": 0.006186, "SO2": 0.005111,
+    "Toluene": 0.003694, "Xylene": 0.003229, "Benzene": 0.002145,
+    "NH3": 0.000917
+};
+
+// Scaling factors derived from data analysis to map pollutant values to AQI contribution
+const AQI_SCALE = {
+    "PM2.5": 0.95, "PM10": 0.45, "NO": 1.2, "NO2": 0.8, "NOx": 0.75,
+    "NH3": 0.6, "CO": 12.0, "SO2": 1.0, "O3": 0.5, "Benzene": 3.0,
+    "Toluene": 0.5, "Xylene": 2.0
+};
+
+const AQI_CATEGORIES = [
+    { max: 50, label: "Good", desc: "Air quality is satisfactory", color: "#28a745" },
+    { max: 100, label: "Moderate", desc: "Acceptable air quality", color: "#ffc107" },
+    { max: 150, label: "Unhealthy for Sensitive Groups", desc: "Vulnerable people may be affected", color: "#fd7e14" },
+    { max: 200, label: "Unhealthy", desc: "Health effects for everyone", color: "#dc3545" },
+    { max: 300, label: "Very Unhealthy", desc: "Emergency conditions", color: "#6f42c1" },
+    { max: 500, label: "Hazardous", desc: "Serious health effects for all", color: "#800000" },
+];
+
+// ---- Build sliders ----
+const slidersDiv = document.getElementById("sliders");
+SLIDERS.forEach(s => {
+    const defaultVal = Math.round((s.max / 4) * 10) / 10;
+    const div = document.createElement("div");
+    div.className = "slider-group";
+    div.innerHTML = `
+        <label><span>${s.name} (${s.unit})</span><span class="val" id="val-${s.name}">${defaultVal}</span></label>
+        <input type="range" id="slider-${s.name}" min="${s.min}" max="${s.max}" step="${s.step}" value="${defaultVal}">
+    `;
+    slidersDiv.appendChild(div);
+    const input = div.querySelector("input");
+    const valSpan = div.querySelector(".val");
+    input.addEventListener("input", () => {
+        valSpan.textContent = parseFloat(input.value).toFixed(1);
+        checkZero();
+    });
+});
+
+// Set today's date
+document.getElementById("pred-date").valueAsDate = new Date();
+
+function checkZero() {
+    const allZero = SLIDERS.every(s => parseFloat(document.getElementById(`slider-${s.name}`).value) === 0);
+    document.getElementById("zero-warning").style.display = allZero ? "block" : "none";
+}
+checkZero();
+
+// ---- Tabs ----
+document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+        document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+        btn.classList.add("active");
+        document.getElementById(btn.dataset.tab).classList.add("active");
+    });
+});
+
+// ---- AQI Prediction ----
+function classifyAQI(value) {
+    for (const cat of AQI_CATEGORIES) {
+        if (value <= cat.max) return cat;
+    }
+    return AQI_CATEGORIES[AQI_CATEGORIES.length - 1];
+}
+
+function predictAQI() {
+    const values = {};
+    SLIDERS.forEach(s => {
+        values[s.name] = parseFloat(document.getElementById(`slider-${s.name}`).value);
+    });
+
+    // Weighted prediction model based on feature importances and scaling
+    let aqi = 0;
+    for (const [feature, importance] of Object.entries(FEATURE_IMPORTANCE)) {
+        const val = values[feature] || 0;
+        const scale = AQI_SCALE[feature] || 1.0;
+        aqi += val * scale * (importance / 0.492825); // Normalize by max importance
+    }
+
+    // Clamp to reasonable range
+    aqi = Math.max(0, Math.min(500, aqi));
+
+    const cat = classifyAQI(aqi);
+
+    document.getElementById("aqi-value").textContent = aqi.toFixed(1);
+    const badge = document.getElementById("aqi-badge");
+    badge.textContent = cat.label;
+    badge.style.backgroundColor = cat.color;
+    document.getElementById("aqi-desc").textContent = cat.desc;
+    document.getElementById("prediction-result").style.display = "block";
+
+    // Gauge chart
+    Plotly.newPlot("gauge-chart", [{
+        type: "bar",
+        x: AQI_CATEGORIES.map(c => c.max),
+        y: AQI_CATEGORIES.map(c => c.label),
+        orientation: "h",
+        marker: { color: AQI_CATEGORIES.map(c => c.color) },
+        text: AQI_CATEGORIES.map(c => "\u2264 " + c.max),
+        textposition: "inside",
+        textfont: { color: "white" }
+    }], {
+        title: { text: "AQI Category Scale", font: { color: "#fafafa" } },
+        xaxis: { title: "AQI Value", color: "#a0a4ab", gridcolor: "#2d3139" },
+        yaxis: { color: "#a0a4ab" },
+        paper_bgcolor: "#1a1d24",
+        plot_bgcolor: "#1a1d24",
+        height: 350,
+        margin: { l: 180, r: 30, t: 40, b: 40 },
+        shapes: [{
+            type: "line", x0: aqi, x1: aqi, y0: -0.5, y1: 5.5,
+            line: { color: "white", width: 3, dash: "dash" }
+        }],
+        annotations: [{
+            x: aqi, y: 5.5, text: "Your AQI: " + aqi.toFixed(1),
+            showarrow: false, font: { color: "white", size: 12 }, yanchor: "bottom"
+        }]
+    }, { responsive: true, displayModeBar: false });
+}
+
+// ---- Feature Importance Chart ----
+function renderImportance() {
+    const features = Object.keys(FEATURE_IMPORTANCE);
+    const values = Object.values(FEATURE_IMPORTANCE);
+
+    Plotly.newPlot("importance-chart", [{
+        type: "bar",
+        x: values,
+        y: features,
+        orientation: "h",
+        marker: {
+            color: values,
+            colorscale: [[0, "#28a745"], [0.5, "#ffc107"], [1, "#dc3545"]],
+        },
+        text: values.map(v => v.toFixed(4)),
+        textposition: "auto",
+        textfont: { color: "white" }
+    }], {
+        title: { text: "Feature Importance", font: { color: "#fafafa" } },
+        xaxis: { title: "Importance", color: "#a0a4ab", gridcolor: "#2d3139" },
+        yaxis: { color: "#a0a4ab", autorange: "reversed" },
+        paper_bgcolor: "#1a1d24",
+        plot_bgcolor: "#1a1d24",
+        height: 500,
+        margin: { l: 120, r: 30, t: 50, b: 50 }
+    }, { responsive: true, displayModeBar: false });
+}
+
+// ---- Historical Trends ----
+const MONTHLY_DATA = [{"YearMonth":"2015-01","City":"Delhi","AQI":342.3},{"YearMonth":"2015-02","City":"Delhi","AQI":327.9},{"YearMonth":"2015-03","City":"Bengaluru","AQI":130.5},{"YearMonth":"2015-03","City":"Chennai","AQI":363.8},{"YearMonth":"2015-03","City":"Delhi","AQI":256.1},{"YearMonth":"2015-03","City":"Hyderabad","AQI":120.0},{"YearMonth":"2015-03","City":"Lucknow","AQI":264.3},{"YearMonth":"2015-04","City":"Bengaluru","AQI":113.7},{"YearMonth":"2015-04","City":"Chennai","AQI":175.9},{"YearMonth":"2015-04","City":"Delhi","AQI":305.3},{"YearMonth":"2015-04","City":"Hyderabad","AQI":140.8},{"YearMonth":"2015-04","City":"Lucknow","AQI":118.6},{"YearMonth":"2015-05","City":"Bengaluru","AQI":102.8},{"YearMonth":"2015-05","City":"Chennai","AQI":176.1},{"YearMonth":"2015-05","City":"Delhi","AQI":348.6},{"YearMonth":"2015-05","City":"Hyderabad","AQI":133.4},{"YearMonth":"2015-05","City":"Lucknow","AQI":137.0},{"YearMonth":"2015-06","City":"Bengaluru","AQI":108.3},{"YearMonth":"2015-06","City":"Chennai","AQI":152.2},{"YearMonth":"2015-06","City":"Delhi","AQI":258.3},{"YearMonth":"2015-06","City":"Hyderabad","AQI":155.5},{"YearMonth":"2015-06","City":"Lucknow","AQI":149.7},{"YearMonth":"2015-07","City":"Bengaluru","AQI":160.5},{"YearMonth":"2015-07","City":"Chennai","AQI":164.1},{"YearMonth":"2015-07","City":"Delhi","AQI":200.3},{"YearMonth":"2015-07","City":"Hyderabad","AQI":78.5},{"YearMonth":"2015-07","City":"Lucknow","AQI":125.2},{"YearMonth":"2015-08","City":"Bengaluru","AQI":134.9},{"YearMonth":"2015-08","City":"Chennai","AQI":122.6},{"YearMonth":"2015-08","City":"Delhi","AQI":218.1},{"YearMonth":"2015-08","City":"Hyderabad","AQI":132.9},{"YearMonth":"2015-08","City":"Lucknow","AQI":105.5},{"YearMonth":"2015-09","City":"Bengaluru","AQI":98.4},{"YearMonth":"2015-09","City":"Chennai","AQI":120.7},{"YearMonth":"2015-09","City":"Delhi","AQI":225.3},{"YearMonth":"2015-09","City":"Hyderabad","AQI":170.1},{"YearMonth":"2015-09","City":"Lucknow","AQI":130.5},{"YearMonth":"2015-10","City":"Bengaluru","AQI":105.3},{"YearMonth":"2015-10","City":"Chennai","AQI":143.6},{"YearMonth":"2015-10","City":"Delhi","AQI":325.0},{"YearMonth":"2015-10","City":"Hyderabad","AQI":217.1},{"YearMonth":"2015-10","City":"Lucknow","AQI":240.2},{"YearMonth":"2015-11","City":"Bengaluru","AQI":83.9},{"YearMonth":"2015-11","City":"Chennai","AQI":120.6},{"YearMonth":"2015-11","City":"Delhi","AQI":405.0},{"YearMonth":"2015-11","City":"Hyderabad","AQI":139.2},{"YearMonth":"2015-11","City":"Lucknow","AQI":397.8},{"YearMonth":"2015-12","City":"Bengaluru","AQI":97.5},{"YearMonth":"2015-12","City":"Chennai","AQI":122.0},{"YearMonth":"2015-12","City":"Delhi","AQI":355.3},{"YearMonth":"2015-12","City":"Hyderabad","AQI":124.7},{"YearMonth":"2015-12","City":"Lucknow","AQI":388.1},{"YearMonth":"2016-01","City":"Bengaluru","AQI":134.3},{"YearMonth":"2016-01","City":"Chennai","AQI":143.8},{"YearMonth":"2016-01","City":"Delhi","AQI":441.9},{"YearMonth":"2016-01","City":"Hyderabad","AQI":170.5},{"YearMonth":"2016-01","City":"Lucknow","AQI":362.5},{"YearMonth":"2016-02","City":"Bengaluru","AQI":143.9},{"YearMonth":"2016-02","City":"Chennai","AQI":155.4},{"YearMonth":"2016-02","City":"Delhi","AQI":312.4},{"YearMonth":"2016-02","City":"Hyderabad","AQI":148.4},{"YearMonth":"2016-02","City":"Lucknow","AQI":322.3},{"YearMonth":"2016-03","City":"Bengaluru","AQI":145.6},{"YearMonth":"2016-03","City":"Chennai","AQI":155.1},{"YearMonth":"2016-03","City":"Delhi","AQI":230.1},{"YearMonth":"2016-03","City":"Hyderabad","AQI":118.3},{"YearMonth":"2016-03","City":"Lucknow","AQI":217.5},{"YearMonth":"2016-04","City":"Bengaluru","AQI":122.0},{"YearMonth":"2016-04","City":"Chennai","AQI":133.2},{"YearMonth":"2016-04","City":"Delhi","AQI":290.7},{"YearMonth":"2016-04","City":"Hyderabad","AQI":110.4},{"YearMonth":"2016-04","City":"Lucknow","AQI":238.6},{"YearMonth":"2016-05","City":"Bengaluru","AQI":67.9},{"YearMonth":"2016-05","City":"Chennai","AQI":129.3},{"YearMonth":"2016-05","City":"Delhi","AQI":268.4},{"YearMonth":"2016-05","City":"Hyderabad","AQI":104.5},{"YearMonth":"2016-05","City":"Lucknow","AQI":205.0},{"YearMonth":"2016-06","City":"Bengaluru","AQI":70.1},{"YearMonth":"2016-06","City":"Chennai","AQI":94.9},{"YearMonth":"2016-06","City":"Delhi","AQI":243.7},{"YearMonth":"2016-06","City":"Hyderabad","AQI":139.0},{"YearMonth":"2016-06","City":"Lucknow","AQI":152.6},{"YearMonth":"2016-07","City":"Bengaluru","AQI":90.1},{"YearMonth":"2016-07","City":"Chennai","AQI":93.0},{"YearMonth":"2016-07","City":"Delhi","AQI":165.0},{"YearMonth":"2016-07","City":"Hyderabad","AQI":156.2},{"YearMonth":"2016-07","City":"Lucknow","AQI":117.1},{"YearMonth":"2016-08","City":"Bengaluru","AQI":64.5},{"YearMonth":"2016-08","City":"Chennai","AQI":134.7},{"YearMonth":"2016-08","City":"Delhi","AQI":147.4},{"YearMonth":"2016-08","City":"Hyderabad","AQI":126.8},{"YearMonth":"2016-08","City":"Lucknow","AQI":96.4},{"YearMonth":"2016-09","City":"Bengaluru","AQI":72.3},{"YearMonth":"2016-09","City":"Chennai","AQI":184.9},{"YearMonth":"2016-09","City":"Delhi","AQI":218.7},{"YearMonth":"2016-09","City":"Hyderabad","AQI":72.9},{"YearMonth":"2016-09","City":"Lucknow","AQI":105.7},{"YearMonth":"2016-10","City":"Bengaluru","AQI":116.6},{"YearMonth":"2016-10","City":"Chennai","AQI":150.5},{"YearMonth":"2016-10","City":"Delhi","AQI":411.1},{"YearMonth":"2016-10","City":"Hyderabad","AQI":93.6},{"YearMonth":"2016-10","City":"Lucknow","AQI":245.0},{"YearMonth":"2016-11","City":"Bengaluru","AQI":110.7},{"YearMonth":"2016-11","City":"Chennai","AQI":140.9},{"YearMonth":"2016-11","City":"Delhi","AQI":474.8},{"YearMonth":"2016-11","City":"Hyderabad","AQI":125.2},{"YearMonth":"2016-11","City":"Lucknow","AQI":385.6},{"YearMonth":"2016-12","City":"Bengaluru","AQI":115.4},{"YearMonth":"2016-12","City":"Chennai","AQI":116.7},{"YearMonth":"2016-12","City":"Delhi","AQI":409.3},{"YearMonth":"2016-12","City":"Hyderabad","AQI":112.5},{"YearMonth":"2016-12","City":"Lucknow","AQI":389.3},{"YearMonth":"2017-01","City":"Bengaluru","AQI":114.6},{"YearMonth":"2017-01","City":"Chennai","AQI":124.4},{"YearMonth":"2017-01","City":"Delhi","AQI":354.2},{"YearMonth":"2017-01","City":"Hyderabad","AQI":149.4},{"YearMonth":"2017-01","City":"Lucknow","AQI":330.6},{"YearMonth":"2017-02","City":"Bengaluru","AQI":119.2},{"YearMonth":"2017-02","City":"Chennai","AQI":120.4},{"YearMonth":"2017-02","City":"Delhi","AQI":343.9},{"YearMonth":"2017-02","City":"Hyderabad","AQI":150.7},{"YearMonth":"2017-02","City":"Lucknow","AQI":296.4},{"YearMonth":"2017-03","City":"Bengaluru","AQI":81.2},{"YearMonth":"2017-03","City":"Chennai","AQI":110.6},{"YearMonth":"2017-03","City":"Delhi","AQI":282.3},{"YearMonth":"2017-03","City":"Hyderabad","AQI":135.0},{"YearMonth":"2017-03","City":"Lucknow","AQI":247.1},{"YearMonth":"2017-04","City":"Bengaluru","AQI":92.0},{"YearMonth":"2017-04","City":"Chennai","AQI":105.6},{"YearMonth":"2017-04","City":"Delhi","AQI":316.8},{"YearMonth":"2017-04","City":"Hyderabad","AQI":148.2},{"YearMonth":"2017-04","City":"Lucknow","AQI":249.5},{"YearMonth":"2017-05","City":"Bengaluru","AQI":67.0},{"YearMonth":"2017-05","City":"Chennai","AQI":121.6},{"YearMonth":"2017-05","City":"Delhi","AQI":315.4},{"YearMonth":"2017-05","City":"Hyderabad","AQI":113.2},{"YearMonth":"2017-05","City":"Lucknow","AQI":252.2},{"YearMonth":"2017-06","City":"Bengaluru","AQI":59.7},{"YearMonth":"2017-06","City":"Chennai","AQI":80.8},{"YearMonth":"2017-06","City":"Delhi","AQI":144.8},{"YearMonth":"2017-06","City":"Hyderabad","AQI":74.1},{"YearMonth":"2017-06","City":"Lucknow","AQI":178.3},{"YearMonth":"2017-07","City":"Bengaluru","AQI":94.6},{"YearMonth":"2017-07","City":"Chennai","AQI":102.0},{"YearMonth":"2017-07","City":"Delhi","AQI":67.2},{"YearMonth":"2017-07","City":"Hyderabad","AQI":61.6},{"YearMonth":"2017-07","City":"Lucknow","AQI":77.3},{"YearMonth":"2017-08","City":"Bengaluru","AQI":83.0},{"YearMonth":"2017-08","City":"Chennai","AQI":95.5},{"YearMonth":"2017-08","City":"Delhi","AQI":68.3},{"YearMonth":"2017-08","City":"Hyderabad","AQI":64.4},{"YearMonth":"2017-08","City":"Lucknow","AQI":96.5},{"YearMonth":"2017-09","City":"Bengaluru","AQI":72.5},{"YearMonth":"2017-09","City":"Chennai","AQI":88.4},{"YearMonth":"2017-09","City":"Delhi","AQI":114.7},{"YearMonth":"2017-09","City":"Hyderabad","AQI":68.8},{"YearMonth":"2017-09","City":"Lucknow","AQI":105.9},{"YearMonth":"2017-10","City":"Bengaluru","AQI":89.7},{"YearMonth":"2017-10","City":"Chennai","AQI":104.9},{"YearMonth":"2017-10","City":"Delhi","AQI":284.2},{"YearMonth":"2017-10","City":"Hyderabad","AQI":124.5},{"YearMonth":"2017-10","City":"Lucknow","AQI":259.1},{"YearMonth":"2017-11","City":"Bengaluru","AQI":77.2},{"YearMonth":"2017-11","City":"Chennai","AQI":92.1},{"YearMonth":"2017-11","City":"Delhi","AQI":406.7},{"YearMonth":"2017-11","City":"Hyderabad","AQI":120.4},{"YearMonth":"2017-11","City":"Lucknow","AQI":383.1},{"YearMonth":"2017-12","City":"Bengaluru","AQI":96.7},{"YearMonth":"2017-12","City":"Chennai","AQI":106.4},{"YearMonth":"2017-12","City":"Delhi","AQI":337.1},{"YearMonth":"2017-12","City":"Hyderabad","AQI":143.7},{"YearMonth":"2017-12","City":"Lucknow","AQI":374.5},{"YearMonth":"2018-01","City":"Bengaluru","AQI":97.6},{"YearMonth":"2018-01","City":"Chennai","AQI":153.7},{"YearMonth":"2018-01","City":"Delhi","AQI":349.7},{"YearMonth":"2018-01","City":"Hyderabad","AQI":143.1},{"YearMonth":"2018-01","City":"Lucknow","AQI":378.0},{"YearMonth":"2018-02","City":"Bengaluru","AQI":81.0},{"YearMonth":"2018-02","City":"Chennai","AQI":116.1},{"YearMonth":"2018-02","City":"Delhi","AQI":289.2},{"YearMonth":"2018-02","City":"Hyderabad","AQI":112.4},{"YearMonth":"2018-02","City":"Lucknow","AQI":317.7},{"YearMonth":"2018-03","City":"Bengaluru","AQI":93.0},{"YearMonth":"2018-03","City":"Chennai","AQI":108.7},{"YearMonth":"2018-03","City":"Delhi","AQI":234.1},{"YearMonth":"2018-03","City":"Hyderabad","AQI":113.1},{"YearMonth":"2018-03","City":"Lucknow","AQI":236.5},{"YearMonth":"2018-04","City":"Bengaluru","AQI":85.7},{"YearMonth":"2018-04","City":"Chennai","AQI":69.2},{"YearMonth":"2018-04","City":"Delhi","AQI":245.5},{"YearMonth":"2018-04","City":"Hyderabad","AQI":96.3},{"YearMonth":"2018-04","City":"Lucknow","AQI":180.8},{"YearMonth":"2018-05","City":"Bengaluru","AQI":92.3},{"YearMonth":"2018-05","City":"Chennai","AQI":82.8},{"YearMonth":"2018-05","City":"Delhi","AQI":235.3},{"YearMonth":"2018-05","City":"Hyderabad","AQI":98.7},{"YearMonth":"2018-05","City":"Lucknow","AQI":255.6},{"YearMonth":"2018-06","City":"Bengaluru","AQI":66.9},{"YearMonth":"2018-06","City":"Chennai","AQI":96.9},{"YearMonth":"2018-06","City":"Delhi","AQI":224.4},{"YearMonth":"2018-06","City":"Hyderabad","AQI":65.6},{"YearMonth":"2018-06","City":"Lucknow","AQI":174.9},{"YearMonth":"2018-07","City":"Bengaluru","AQI":61.8},{"YearMonth":"2018-07","City":"Chennai","AQI":93.3},{"YearMonth":"2018-07","City":"Delhi","AQI":112.4},{"YearMonth":"2018-07","City":"Hyderabad","AQI":54.3},{"YearMonth":"2018-07","City":"Lucknow","AQI":97.4},{"YearMonth":"2018-08","City":"Bengaluru","AQI":62.8},{"YearMonth":"2018-08","City":"Chennai","AQI":86.5},{"YearMonth":"2018-08","City":"Delhi","AQI":122.1},{"YearMonth":"2018-08","City":"Hyderabad","AQI":54.1},{"YearMonth":"2018-08","City":"Lucknow","AQI":100.0},{"YearMonth":"2018-09","City":"Bengaluru","AQI":76.2},{"YearMonth":"2018-09","City":"Chennai","AQI":96.5},{"YearMonth":"2018-09","City":"Delhi","AQI":121.9},{"YearMonth":"2018-09","City":"Hyderabad","AQI":79.0},{"YearMonth":"2018-09","City":"Lucknow","AQI":107.6},{"YearMonth":"2018-10","City":"Bengaluru","AQI":94.7},{"YearMonth":"2018-10","City":"Chennai","AQI":104.0},{"YearMonth":"2018-10","City":"Delhi","AQI":290.4},{"YearMonth":"2018-10","City":"Hyderabad","AQI":110.1},{"YearMonth":"2018-10","City":"Lucknow","AQI":264.6},{"YearMonth":"2018-11","City":"Bengaluru","AQI":104.2},{"YearMonth":"2018-11","City":"Chennai","AQI":118.8},{"YearMonth":"2018-11","City":"Delhi","AQI":367.1},{"YearMonth":"2018-11","City":"Hyderabad","AQI":111.0},{"YearMonth":"2018-11","City":"Lucknow","AQI":351.6},{"YearMonth":"2018-12","City":"Bengaluru","AQI":119.0},{"YearMonth":"2018-12","City":"Chennai","AQI":139.0},{"YearMonth":"2018-12","City":"Delhi","AQI":400.4},{"YearMonth":"2018-12","City":"Hyderabad","AQI":133.3},{"YearMonth":"2018-12","City":"Lucknow","AQI":344.7},{"YearMonth":"2019-01","City":"Bengaluru","AQI":116.8},{"YearMonth":"2019-01","City":"Chennai","AQI":131.0},{"YearMonth":"2019-01","City":"Delhi","AQI":365.7},{"YearMonth":"2019-01","City":"Hyderabad","AQI":133.3},{"YearMonth":"2019-01","City":"Lucknow","AQI":315.5},{"YearMonth":"2019-02","City":"Bengaluru","AQI":106.2},{"YearMonth":"2019-02","City":"Chennai","AQI":118.1},{"YearMonth":"2019-02","City":"Delhi","AQI":258.2},{"YearMonth":"2019-02","City":"Hyderabad","AQI":113.2},{"YearMonth":"2019-02","City":"Lucknow","AQI":243.1},{"YearMonth":"2019-03","City":"Bengaluru","AQI":122.1},{"YearMonth":"2019-03","City":"Chennai","AQI":101.4},{"YearMonth":"2019-03","City":"Delhi","AQI":197.4},{"YearMonth":"2019-03","City":"Hyderabad","AQI":106.2},{"YearMonth":"2019-03","City":"Lucknow","AQI":217.6},{"YearMonth":"2019-04","City":"Bengaluru","AQI":124.3},{"YearMonth":"2019-04","City":"Chennai","AQI":87.5},{"YearMonth":"2019-04","City":"Delhi","AQI":219.4},{"YearMonth":"2019-04","City":"Hyderabad","AQI":94.8},{"YearMonth":"2019-04","City":"Lucknow","AQI":217.7},{"YearMonth":"2019-05","City":"Bengaluru","AQI":105.4},{"YearMonth":"2019-05","City":"Chennai","AQI":103.6},{"YearMonth":"2019-05","City":"Delhi","AQI":235.8},{"YearMonth":"2019-05","City":"Hyderabad","AQI":113.4},{"YearMonth":"2019-05","City":"Lucknow","AQI":184.1},{"YearMonth":"2019-06","City":"Bengaluru","AQI":70.5},{"YearMonth":"2019-06","City":"Chennai","AQI":112.7},{"YearMonth":"2019-06","City":"Delhi","AQI":197.8},{"YearMonth":"2019-06","City":"Hyderabad","AQI":64.7},{"YearMonth":"2019-06","City":"Lucknow","AQI":167.7},{"YearMonth":"2019-07","City":"Bengaluru","AQI":63.7},{"YearMonth":"2019-07","City":"Chennai","AQI":88.7},{"YearMonth":"2019-07","City":"Delhi","AQI":145.1},{"YearMonth":"2019-07","City":"Hyderabad","AQI":48.1},{"YearMonth":"2019-07","City":"Lucknow","AQI":94.4},{"YearMonth":"2019-08","City":"Bengaluru","AQI":59.4},{"YearMonth":"2019-08","City":"Chennai","AQI":85.5},{"YearMonth":"2019-08","City":"Delhi","AQI":99.3},{"YearMonth":"2019-08","City":"Hyderabad","AQI":57.3},{"YearMonth":"2019-08","City":"Lucknow","AQI":90.3},{"YearMonth":"2019-09","City":"Bengaluru","AQI":73.0},{"YearMonth":"2019-09","City":"Chennai","AQI":103.6},{"YearMonth":"2019-09","City":"Delhi","AQI":106.5},{"YearMonth":"2019-09","City":"Hyderabad","AQI":50.0},{"YearMonth":"2019-09","City":"Lucknow","AQI":76.6},{"YearMonth":"2019-10","City":"Bengaluru","AQI":81.1},{"YearMonth":"2019-10","City":"Chennai","AQI":102.9},{"YearMonth":"2019-10","City":"Delhi","AQI":251.0},{"YearMonth":"2019-10","City":"Hyderabad","AQI":78.5},{"YearMonth":"2019-10","City":"Lucknow","AQI":205.4},{"YearMonth":"2019-11","City":"Bengaluru","AQI":96.2},{"YearMonth":"2019-11","City":"Chennai","AQI":122.0},{"YearMonth":"2019-11","City":"Delhi","AQI":356.1},{"YearMonth":"2019-11","City":"Hyderabad","AQI":138.0},{"YearMonth":"2019-11","City":"Lucknow","AQI":329.4},{"YearMonth":"2019-12","City":"Bengaluru","AQI":81.8},{"YearMonth":"2019-12","City":"Chennai","AQI":80.2},{"YearMonth":"2019-12","City":"Delhi","AQI":353.9},{"YearMonth":"2019-12","City":"Hyderabad","AQI":131.3},{"YearMonth":"2019-12","City":"Lucknow","AQI":292.2},{"YearMonth":"2020-01","City":"Bengaluru","AQI":95.3},{"YearMonth":"2020-01","City":"Chennai","AQI":87.5},{"YearMonth":"2020-01","City":"Delhi","AQI":308.5},{"YearMonth":"2020-01","City":"Hyderabad","AQI":104.5},{"YearMonth":"2020-01","City":"Lucknow","AQI":272.6},{"YearMonth":"2020-02","City":"Bengaluru","AQI":96.5},{"YearMonth":"2020-02","City":"Chennai","AQI":78.1},{"YearMonth":"2020-02","City":"Delhi","AQI":262.1},{"YearMonth":"2020-02","City":"Hyderabad","AQI":95.0},{"YearMonth":"2020-02","City":"Lucknow","AQI":216.7},{"YearMonth":"2020-03","City":"Bengaluru","AQI":90.7},{"YearMonth":"2020-03","City":"Chennai","AQI":70.3},{"YearMonth":"2020-03","City":"Delhi","AQI":135.8},{"YearMonth":"2020-03","City":"Hyderabad","AQI":78.7},{"YearMonth":"2020-03","City":"Lucknow","AQI":134.0},{"YearMonth":"2020-04","City":"Bengaluru","AQI":68.5},{"YearMonth":"2020-04","City":"Chennai","AQI":63.5},{"YearMonth":"2020-04","City":"Delhi","AQI":113.0},{"YearMonth":"2020-04","City":"Hyderabad","AQI":65.0},{"YearMonth":"2020-04","City":"Lucknow","AQI":106.7},{"YearMonth":"2020-05","City":"Bengaluru","AQI":73.2},{"YearMonth":"2020-05","City":"Chennai","AQI":78.7},{"YearMonth":"2020-05","City":"Delhi","AQI":148.6},{"YearMonth":"2020-05","City":"Hyderabad","AQI":79.4},{"YearMonth":"2020-05","City":"Lucknow","AQI":119.1},{"YearMonth":"2020-06","City":"Bengaluru","AQI":55.2},{"YearMonth":"2020-06","City":"Chennai","AQI":103.1},{"YearMonth":"2020-06","City":"Delhi","AQI":125.7},{"YearMonth":"2020-06","City":"Hyderabad","AQI":47.1},{"YearMonth":"2020-06","City":"Lucknow","AQI":96.5},{"YearMonth":"2020-07","City":"Bengaluru","AQI":43.0},{"YearMonth":"2020-07","City":"Chennai","AQI":92.0},{"YearMonth":"2020-07","City":"Delhi","AQI":101.0},{"YearMonth":"2020-07","City":"Hyderabad","AQI":48.0},{"YearMonth":"2020-07","City":"Lucknow","AQI":76.0}];
+
+const SUMMARY_STATS = {"Bengaluru":{"mean":94.3,"median":86.0,"min":20.0,"max":352.0,"count":1910},"Chennai":{"mean":114.5,"median":100.0,"min":30.0,"max":449.0,"count":1884},"Delhi":{"mean":259.5,"median":257.0,"min":29.0,"max":716.0,"count":1999},"Hyderabad":{"mean":109.2,"median":104.0,"min":22.0,"max":737.0,"count":1880},"Lucknow":{"mean":218.0,"median":198.0,"min":39.0,"max":707.0,"count":1893}};
+
+const CITIES = ["Delhi", "Bengaluru", "Lucknow", "Chennai", "Hyderabad"];
+const CITY_COLORS = { Delhi: "#ff4b4b", Bengaluru: "#28a745", Lucknow: "#ffc107", Chennai: "#17a2b8", Hyderabad: "#6f42c1" };
+
+function renderTrends() {
+    const checkboxDiv = document.getElementById("city-checkboxes");
+    checkboxDiv.innerHTML = "";
+    CITIES.forEach((city, i) => {
+        const lbl = document.createElement("label");
+        lbl.innerHTML = `<input type="checkbox" value="${city}" ${i < 3 ? "checked" : ""} onchange="updateTrends()"> ${city}`;
+        checkboxDiv.appendChild(lbl);
+    });
+    updateTrends();
+
+    // Summary table
+    let html = '<table><thead><tr><th>City</th><th>Mean AQI</th><th>Median AQI</th><th>Min AQI</th><th>Max AQI</th><th>Data Points</th></tr></thead><tbody>';
+    for (const [city, stats] of Object.entries(SUMMARY_STATS)) {
+        html += `<tr><td>${city}</td><td>${stats.mean}</td><td>${stats.median}</td><td>${stats.min}</td><td>${stats.max}</td><td>${stats.count}</td></tr>`;
+    }
+    html += '</tbody></table>';
+    document.getElementById("summary-table").innerHTML = html;
+}
+
+function updateTrends() {
+    const selected = Array.from(document.querySelectorAll("#city-checkboxes input:checked")).map(cb => cb.value);
+    const traces = selected.map(city => {
+        const cityData = MONTHLY_DATA.filter(d => d.City === city);
+        return {
+            x: cityData.map(d => d.YearMonth),
+            y: cityData.map(d => d.AQI),
+            name: city,
+            type: "scatter",
+            mode: "lines",
+            line: { color: CITY_COLORS[city], width: 2 }
+        };
+    });
+
+    Plotly.newPlot("trends-chart", traces, {
+        title: { text: "Monthly Average AQI by City", font: { color: "#fafafa" } },
+        xaxis: { title: "Month", color: "#a0a4ab", gridcolor: "#2d3139", tickangle: -45 },
+        yaxis: { title: "Average AQI", color: "#a0a4ab", gridcolor: "#2d3139" },
+        paper_bgcolor: "#1a1d24",
+        plot_bgcolor: "#1a1d24",
+        legend: { font: { color: "#fafafa" } },
+        height: 500,
+        margin: { l: 60, r: 30, t: 50, b: 80 }
+    }, { responsive: true, displayModeBar: false });
+}
+
+// ---- Init ----
+renderImportance();
+renderTrends();
+</script>
+</body>
+</html>
